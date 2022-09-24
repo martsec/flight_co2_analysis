@@ -1,0 +1,183 @@
+= Greenwashing top
+
+This project aims to obtain a list of the top individual jet polluters, 
+focused on comparing a month of their CO2 generation with how much have generated over
+a human individual. 
+
+For now we focus on private jets, but it can be exanded to yatchs via vesselfinder.com or marinetraffic.com 
+This analysis is useful https://blogs.unimelb.edu.au/sciencecommunication/2019/10/06/how-to-calculate-a-superyachts-carbon-footprint/ 
+
+[TIP]
+====
+See for example for Amacio Ortega (Zara):
+
+* Yatch DRIZZLE https://www.vesselfinder.com/es/vessels/DRIZZLE-IMO-1011719-MMSI-256701000
+====
+
+== Ownership attribution
+
+Attribution of vessels to individuals needs to be done via multiple sources. One is https://www.superyachtfan.com/private-jet/owner/ that also has yatch info.
+
+
+== ADSB data 
+
+adsbexchange.com will be our main source of information since it does not hide aircrafts from VIP nor military. 
+
+For data samples, see https://www.adsbexchange.com/data-samples/
+
+API docs: https://www.adsbexchange.com/version-2-api
+
+Using `spark-shell --driver-memory 32g  --master local[*]` to analyze.
+
+=== Aircraft database
+
+[INFO]
+====
+Aircraft type descriptions (`short_type` column), and are covered by ICAO Doc 8643.
+
+The first symbol describes the aircraft type:
+
+* L - Landplane, e.g. A320. Note: A floatplane, which can temporarily be converted to a landplane or vice versa, is described as a landplane and not a seaplane or amphibian in ICAO Doc 8643.
+* S - Seaplane, e.g. HARBIN SH-5 (ICAO designator SH5)
+* A - Amphibian, e.g. LA4
+* G - Gyrocopter, e.g. A002
+* H - Helicopter, e.g. A109
+* T - Tiltrotor, e.g. V22
+
+The second symbol specifies the number of engines 1, 2, 3, 4, 6, 8 or C, where C means that two engines are coupled to drive a single propeller system (e.g. C08T). The C symbol is only used for fixed-wing aircraft.
+
+The third symbol specifies the engine type:
+
+* J - jet
+* T - turboprop/turboshaft
+* P - piston
+* E - electric
+* R - rocket
+
+Source: Aircraft Description (ICAO Doc 8643), skybrary.aero
+https://aviation.stackexchange.com/questions/92512/what-do-the-3-character-aircraft-type-codes-mean
+====
+
+[source,scala]
+----
+val aircrafts = spark.read.json("basic-aircraft-db.json.gz")
+
+// Zara and Mango's owners
+aircrafts.where("reg like 'EC%' and ownop is not null").show(false)
+// Spain's presidential jet
+aircrafts.where("icaotype like 'F%' and reg like 'T.%'").show(100, false)
+----
+
+=== Operations 
+Using ADS-B path data, we determine takeoffs and landings (with runway used) at airports and heliports worldwide. 
+
+Csv and json seem to have the same data. 
+
+[WARNING]
+====
+It can give incorrect results since it interpolates and can result in something like the following (not showing it also landed in PMI)
+
++--------------------------+------------+-------+-----------------+----------+---------+--------------+-----+
+|time                      |registration|airport|municipality     |iso_region|operation|est_flighttime|ownop|
++--------------------------+------------+-------+-----------------+----------+---------+--------------+-----+
+|2022-06-01 10:07:16.409+00|EC-MRR      |LEMD   |Madrid           |ES-M      |takeoff  |null          |null |
+|2022-06-01 12:03:15.136+00|EC-MRR      |LEPA   |Palma De Mallorca|ES-PM     |takeoff  |null          |null |
+|2022-06-01 13:02:50.533+00|EC-MRR      |LEMD   |Madrid           |ES-M      |landing  |00:59:35.397  |null |
++--------------------------+------------+-------+-----------------+----------+---------+--------------+-----+
+====
+
+[source,scala]
+----
+val ops = spark.read.option("header", true).csv("operations-2022-06-01.csv.gz")
+val ops_json = spark.read.json("operations-2022-06-01.json.gz")
+
+// Jet-like landed touchpoints in spain 
+// it can be incomplete since we do not have airports from other countries
+ ops.
+   where("iso_region like 'ES%' and (ac_type like 'F%' or ac_type like 'G%')").
+   select("time", "registration", "airport", "municipality", "iso_region", "operation", "est_flighttime", "ownop").
+   orderBy("registration", "time").
+   show(100, false)
+
+
+// EC-MRR touchpoints 
+ ops.
+   where("registration = 'EC-MRR'").
+   select("time", "registration", "airport", "municipality", "iso_region", "operation", "est_flighttime", "ownop").
+   orderBy("registration", "time").
+   show(100, false)
+----
+
+=== Historic data every 5 seconds
+Snapshots of all global airborne traffic are archived every 5 seconds starting May 2020, (prior data is available every 60 secs from starting in July 2016).
+
+Download demo data via `wget -r -np -nH --cut-dirs=1 -R "index.html*" https://samples.adsbexchange.com/readsb-hist/2022/05/01/`
+
+[source,scala]
+----
+val hist_raw = spark.read.option("multiLine", true).json("readsb-hist")
+// Flattening to obtain one row per aircraft position
+val hist_exploded = hist_raw.select($"now", explode($"aircraft") as "aircraft").select("now", "aircraft.*")
+// optimization
+hist_exploded.coalesce(32).write.format("parquet").mode("overwrite").save("readsb-compress")
+
+val hist = spark.read.parquet("readsb-compress")
+
+val gulfstream = hist.where("t in ('GLF6', 'GLEX', 'GLF5', 'GLF4')")
+val falcon900 = hist.where("t in ('F900')")
+
+// Interesting columns for us 
+spark.conf.set("spark.sql.session.timeZone", "UTC")
+val interesingCols = gulfstream.select(from_unixtime($"now") as "ts", $"r" as "reg", $"category", $"t", $"dbFlags", $"flight", $"mach", $"seen_pos", $"gs", $"ias", $"tas", $"type", coalesce($"lat",$"rr_lat") as "lat", coalesce($"lon", $"rr_lon") as "lon")
+ 
+interesingCols.show(100)
+val num_records = interesingCols.orderBy("reg", "now").groupBy("reg").count()
+
+// See who the owner is 
+num_records.join(aircrafts, Seq("reg"), "left").where("ownop is not null").show(100, false)
+
+def billGates = interesingCols.where("reg = 'N194WM'").select("reg", "ts", "mach", "seen_pos", "gs", "lat", "lon")
+
+
+def haversineDistance(longitude1: Double, latitude1: Double, longitude2: Double, latitude2: Double): Double = {
+  /** Convert (lat,lon) pairs to distance in KM. Not really computing height nor ellipsis but good enough for now
+   */
+  val R = 6372.8;
+  val dlat = math.toRadians(latitude2 - latitude1);
+  val dlog = math.toRadians(longitude2 - longitude1);
+  val a = math.sin(dlat / 2) * math.sin(dlat / 2) + math.cos(math.toRadians(latitude1)) * math.cos(math.toRadians(latitude2)) * math.sin(dlog / 2) * math.sin(dlog / 2)
+  val c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+  val distance = R * c;
+  return distance
+}
+val haversineDistanceUDF = udf[Double, Double, Double, Double, Double](haversineDistance)
+
+import org.apache.spark.sql.expressions.Window
+val windowSpec = Window.partitionBy('reg).orderBy('ts)
+val withDistance = billGates.
+  withColumn("prev_lat", lead('lat, 1) over windowSpec).
+  withColumn("prev_lon", lead('lon, 1) over windowSpec).
+  withColumn("distance", haversineDistanceUDF('lon, 'lat, 'prev_lon, 'prev_lat))
+
+// Daily km 
+withDistance.where("distance > 10").groupBy("reg").sum("distance").orderBy($"sum(distance)" desc).
+  join(aircrafts, Seq("reg"), "left").where("ownop is not null").show(100, false)
+// might not be accurate since it gives 1743 when it should return 6653  (ok, I just have downloaded half a trip up to greenland)
+
+----
+
+=== Aircraft trace files (Trace Files)
+ Activity by individual ICAO hex for all aircraft during one 24-hour period are sub-organized by last two digits of hex code.
+
+[INFO]
+====
+I think at least the US, Canada, Germany, Belgium use a system where each possible registration has its own (fixed) hex code tied to it. This means that for these countries you could deduce the registration from the hex code. Example: N15006 is A0CCA7, N15007 is A0CCA8, etc.
+
+Countries like the Netherlands assign a hex code when a registration is reserved/allocated. Example: I register my plane today as PH-ABC, I get hex 485A24, you register your plane tomorrow as PH-XYZ and will get hex 485A25.
+
+Countries like the UK have hex codes assigned to the aircraft itself, so changing your plane's registration has no effect on the hex code.
+
+This is a bit oversimplified, and likely not completely true, but these are patterns I noticed. This means that only the first system could see hex codes reused on different aircraft, as the other countries will assign a new, unused hex code to a new aircraft that reuses an old registration.
+====
+
+Download demo data via `wget -r -np -nH --cut-dirs=1 -R "index.html*" -P traces https://samples.adsbexchange.com/traces/2022/05/01/`
