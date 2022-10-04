@@ -42,12 +42,35 @@ def plot_map(df, color="ownop"):
     fig.update_layout(mapbox_style="open-street-map", mapbox_zoom=1, mapbox_center_lat = 40, mapbox_center_lon=0,
                       margin={"r":0,"t":0,"l":0,"b":0})
     return fig
-    
+
+def horizontal_bar(df, x, y):
+    grouped = attribution[[x, rank_y_column]].groupby(x).sum().reset_index()
+    chart = (
+        alt.Chart(grouped.sort_values(y, ascending=False)[:20])
+        .mark_bar()
+        .encode(
+            x=alt.X(rank_y_column, type="quantitative", title=""),
+            y=alt.Y(x, type="nominal", title=""),
+        )
+    )
+    return chart
 
 # Load data
 countries=[]
 ownop =[]
 attribution = load_attribution(countries=countries, owners=ownop)
+
+
+TIPS = [
+    "Look for Aircraft 'EMS-2', now owned by the Jordan Royal Squadron that was probably a spanish aircraft (military).",
+    "Look for 'Iron Maiden' to see all the places they have been performing at.",
+    "Liechestein and Switzerland have the same registration prefix: 'HB'. So you'll get data from both together.",
+    "There is data from individuals and companies owning 2 jets or less.",
+    "Fuel consumed and CO2 generated is an approximation and is probably higher than what is stated here. It depends on plane weight, speed, flight route...",
+]
+import random
+
+st.info(random.choice(TIPS), icon="ℹ️")
 
 
 # Selectors
@@ -56,16 +79,22 @@ countries = st.sidebar.multiselect("Country", attribution.country.unique(), defa
 ownop = st.sidebar.multiselect("Choose polluters", attribution.ownop.unique(), default=None)
 attribution = load_attribution(countries=countries, owners=ownop)
 
-from datetime import datetime, timezone, timedelta
-yesterday = datetime.now(timezone.utc) - timedelta(days=1)
-one_week_ago = datetime.now(timezone.utc) - timedelta(days=45)
-time_range = (one_week_ago, yesterday)
-time_range = st.sidebar.slider(
-    "Time range:",
-    value=time_range,
-    format="DD/MM/YY",
-)
-st.sidebar.write("time range", time_range)
+#from datetime import datetime, timezone, timedelta
+#yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+#one_week_ago = datetime.now(timezone.utc) - timedelta(days=45)
+#time_range = (one_week_ago, yesterday)
+#time_range = st.sidebar.slider(
+#    "Time range:",
+#    value=time_range,
+#    format="DD/MM/YY",
+#)
+#st.sidebar.write("time range", time_range)
+
+num_owners, num_planes, jetw_with_co2= st.columns(3)
+num_planes.metric("Unique Jets", attribution.icao.nunique())
+num_owners.metric("Unique Owners", attribution.ownop.nunique())
+jetw_with_co2.metric("Jets With CO2 data", attribution.co2_tons.count())
+st.write("TODO: liechestein and switzerland share prefix (HB)... How can we distinguish those plane countries?")
 
 st.subheader('Most contaminating billionares')
 #countries = st.multiselect("Choose country", attribution.country, default=None) 
@@ -75,18 +104,17 @@ st.subheader('Most contaminating billionares')
 #st.bar_chart(attribution, x="ownop", y=rank_y_column)
 
 # Horizontal stacked bar chart
-chart = (
-    alt.Chart(attribution.sort_values("co2_tons")[:20])
-    .mark_bar()
-    .encode(
-        x=alt.X(rank_y_column, type="quantitative", title=""),
-        y=alt.Y("ownop", type="nominal", title=""),
-    )
-)
+col1, col2 = st.columns(2)
 
-st.bar_chart(attribution.sort_values("co2_tons")[:20], x="ownop", y=rank_y_column)
+with col1:
+    st.altair_chart(horizontal_bar(attribution, "ownop", rank_y_column), use_container_width=True)
+    st.header("Owners rank")
 
-st.altair_chart(chart, use_container_width=True)
+with col2:
+    st.altair_chart(horizontal_bar(attribution, "country", rank_y_column), use_container_width=True)
+    st.header("Country rank")
+
+
 
 st.subheader('Trip map')
 col1, col2, col3 = st.columns(3)

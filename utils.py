@@ -25,7 +25,7 @@ def compute_co2(flight_time, fuel_consumption, aircrafts):
     with_type = flight_time.join(aircrafts.select("icao", "icaotype"), on="icao", how="left")
     
     return with_type\
-      .join(fuel_consumption.select(["icaotype", "galph"]) , on="icaotype")\
+      .join(fuel_consumption.select(["icaotype", "galph"]) , on="icaotype", how="left")\
       .withColumn("fuel_used_kg", col("air_s")/3600 * col("galph") * 3.04)\
       .withColumn("co2_tons", col("fuel_used_kg") * 3.15 / 907.185)\
       .drop("icaotype")
@@ -45,9 +45,9 @@ def get_individually_owned(trips, aircrafts_db):
     return trips.join(filtered_aircrafts, on="icao")
 
 def get_individually_owned_icao(aircrafts_db): 
-    individuals = aircrafts_db.groupby("ownop").count().where("count <= 2").drop("count")
+    individuals = aircrafts_db.where("ownop is not null").groupby("ownop").count().where("count <= 2").drop("count")
     common_airline_words = [
-        "air", "charter", "trust", "llc", "bank", "corp", "industries" "inc", "leasing", "properties", "holding", "group", "police", "service", "govern",
+        "air", "charter", "trust", "llc", "bank", "corp", "industries", "inc", "leasing", "properties", "holding", "group", "police", "service", "govern",
         "pending", "jet", "aviation", "swoop", "limited", "state", "minist", "governmen", "ltd", "fund", "department", "sidney", "foundation"
     ]
     end_filter = ["co", "builders", "farms", "lp", "city"]
