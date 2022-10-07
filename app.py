@@ -50,7 +50,7 @@ with st.expander("Los Nadies - Eduardo Galeano"):
 
 st.title('Greenwashing top')
 
-if st.secrets["env"] == "streamlit:
+if st.secrets["env"] == "streamlit":
     @st.experimental_memo(ttl=600)
     def load_attribution(countries=None, owners=None):
         df = pd.read_csv("s3://gwt/export/attribution_co2.csv", header=0)
