@@ -13,7 +13,7 @@ def compute_flight_time(ticks, s_between_ticks = 5):
     
     """
     flight_time = ticks.where("altitude_baro > 10").\
-      groupBy("icao").count().\
+      groupBy("date", "icao").count().\
       withColumns({
         "air_s": (col("count") + 40) * s_between_ticks,  
         "air_h": (col("count") + 40) * s_between_ticks / 3600, 
@@ -68,7 +68,7 @@ def resample(ticks, unix_s_col, plane_identifier="icao", sampling_s=60):
 
     resampled = ts_resampled.\
       withColumn("_window_rank", row_number().over(resampled_window)).\
-      where("_window_rank = 1").drop("_window_rank")
+      where("_window_rank = 1").drop("_window_rank").drop("time_resampled")
     return resampled
 
 
