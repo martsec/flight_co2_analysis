@@ -51,7 +51,7 @@ with st.expander("Los Nadies - Eduardo Galeano"):
 st.title('Greenwashing top')
 
 if st.secrets["env"] == "streamlit":
-    storage_options={"anon":False, "client_kwargs":{'endpoint_url':st.secrets["AWS_S3_ENDPOINT"]})
+    storage_options={"anon":False, "client_kwargs":{'endpoint_url':st.secrets["AWS_S3_ENDPOINT"]}})
     @st.experimental_memo(ttl=600)
     def load_attribution(countries=None, owners=None):
         df = pd.read_csv("s3://gwt/export/attribution_co2.csv", header=0, storage_options=storage_options)
