@@ -170,7 +170,8 @@ TIPS = [
     "Fuel consumed and CO2 generated is an approximation and is probably higher than what is stated here. It depends on plane weight, speed, flight route...",
     "Ownership for non-US jets is not as good as we would like.",
     "Improvement plan: Detect if owner is a company or an individual with a Named Entity Recognition algorithm (bert-base-NER from hugginface)",
-    ""
+    "Improvement plan: Allow selecting multiple days at once.",
+    "Improvement plan: form to improve ownership data."
 ]
 SOURCES = [
     "[CO2 Data explorer](https://ourworldindata.org/explorers/co2) - World of Data",
@@ -191,14 +192,18 @@ co2_countries = load_co2_country()
 st.sidebar.write(
     "> In a world with dark and gloomy future, _los nadies_ are requested to use less the car, use ventilators instead of ACs, fly less, etc. while those tho think are someone contribure more everytime to the global warming.")
 
+
+st.sidebar.subheader("Instructions")
+st.write("Choose which ")
+
 country_options = co2_countries.country.to_list()
-country_comparison = st.sidebar.selectbox("Metrics in", country_options, index=country_options.index("World"))
+country_comparison = st.sidebar.selectbox("Country CO2 per capita to compare to", country_options, index=country_options.index("World"))
 co2_per_capita = float(co2_countries.loc[co2_countries.country == country_comparison, "co2_per_capita"].values[0])
 
 # rank_y_column = st.sidebar.selectbox("Metrics in", [c for c in attribution.columns if c not in ("ownop", "reg", "icao")])
 
-countries = st.sidebar.multiselect("Polluters country", attribution.country.unique(), default=None)
-ownop = st.sidebar.multiselect("Choose polluters", attribution.ownop.unique(), default=None)
+countries = st.sidebar.multiselect("Jet owners country", attribution.country.unique(), default=None)
+ownop = st.sidebar.multiselect("Filter Jet owners", attribution.ownop.unique(), default=None)
 date = st.sidebar.selectbox("Choose Date", attribution.date.unique())
 
 st.sidebar.empty()
@@ -223,12 +228,21 @@ attribution["metric"] = attribution["co2_tons"] / (attribution["air_h"] * hourly
 #)
 #st.sidebar.write("time range", time_range)
 
+num_owners = attribution.ownop.nunique()
+num_hrs = np.round(attribution.air_h.sum(), 2)
+num_co2 = np.round(attribution.co2_tons.sum(), 2)
+num_citizens = int(attribution["metric"].sum())
 
+st.write(
+    f"On {date}, {num_owners} jet owners polluted at least like "
+    f"{num_citizens} {country_comparison} citizens. "
+    f"They flew {num_hrs} hours and generated {num_co2} CO2 Tons.")
+st.write(f"For comparison, a citizen from {country_comparison} generates {np.round(co2_per_capita, 2)} CO2 Tons *per year*")
 
 col1, col2, col3 = st.columns(3)
-col1.metric("Flown Hours", np.round(attribution.air_h.sum(), 2))
-col2.metric("CO2 tons", np.round(attribution.co2_tons.sum(), 2)) #, "+8%")
-col3.metric("equivalent to", np.round(attribution["metric"].sum(), 0), f" {country_comparison} citizens", delta_color="inverse")
+col1.metric("Flown Hours", num_hrs)
+col2.metric("CO2 tons", num_co2) #, "+8%")
+col3.metric("equivalent to", num_citizens, f" {country_comparison} citizens", delta_color="inverse")
 #countries = st.multiselect("Choose country", attribution.country, default=None) 
 
 
