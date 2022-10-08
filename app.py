@@ -194,7 +194,6 @@ st.sidebar.write(
 
 
 st.sidebar.subheader("Instructions")
-st.write("Choose which ")
 
 country_options = co2_countries.country.to_list()
 country_comparison = st.sidebar.selectbox("Country CO2 per capita to compare to", country_options, index=country_options.index("World"))
@@ -206,6 +205,7 @@ countries = st.sidebar.multiselect("Jet owners country", attribution.country.uni
 ownop = st.sidebar.multiselect("Filter Jet owners", attribution.ownop.unique(), default=None)
 date = st.sidebar.selectbox("Choose Date", attribution.date.unique())
 
+st.sidebar.write("Filter by Jet owners or countries to show the map.")
 st.sidebar.empty()
 st.sidebar.subheader("Sources")
 st.sidebar.caption("  \n".join(SOURCES))
@@ -233,11 +233,14 @@ num_hrs = np.round(attribution.air_h.sum(), 2)
 num_co2 = np.round(attribution.co2_tons.sum(), 2)
 num_citizens = int(attribution["metric"].sum())
 
-st.write(
+st.error(
     f"On {date}, {num_owners} jet owners polluted at least like "
     f"{num_citizens} {country_comparison} citizens. "
-    f"They flew {num_hrs} hours and generated {num_co2} CO2 Tons.")
-st.write(f"For comparison, a citizen from {country_comparison} generates {np.round(co2_per_capita, 2)} CO2 Tons *per year*")
+    f"They flew {num_hrs} hours and generated {num_co2} CO2 Tons."
+    f"For comparison, a citizen from {country_comparison} generates "
+    f"{np.round(co2_per_capita, 2)} CO2 Tons **per year**.",
+    icon="🔥"
+)
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Flown Hours", num_hrs)
