@@ -50,7 +50,6 @@ with st.expander("Los Nadies - Eduardo Galeano"):
     sino en la crónica roja de la prensa local.  
     Los nadies que cuestan menos que la bala que los mata.  
     """)
-    st.write("> In a world with dark and gloomy future, _los nadies_ are requested to use less the car, use ventilators instead of ACs, fly less, etc. while those tho think are someone contribure more everytime to the global warming.")
 
 if st.secrets["env"] == "streamlit":
     storage_options = {
@@ -184,10 +183,14 @@ SOURCES = [
 ]
 import random
 
-st.info(random.choice(TIPS + SOURCES), icon="ℹ️")
+st.warning('This is a Work In Progress app. Please do not share much. Feedback is welcomed at [@8vicat](https://twitter.com/8vicat)', icon="⚠️")
+st.info(random.choice(TIPS), icon="ℹ️")
 co2_countries = load_co2_country()
 
 # Selectors
+st.sidebar.write(
+    "> In a world with dark and gloomy future, _los nadies_ are requested to use less the car, use ventilators instead of ACs, fly less, etc. while those tho think are someone contribure more everytime to the global warming.")
+
 country_options = co2_countries.country.to_list()
 country_comparison = st.sidebar.selectbox("Metrics in", country_options, index=country_options.index("World"))
 co2_per_capita = float(co2_countries.loc[co2_countries.country == country_comparison, "co2_per_capita"].values[0])
