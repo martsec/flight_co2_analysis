@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import altair as alt
 import plotly.express as px
+import s3fs
+
 st.set_page_config(
     page_title="Greenwashing Flights",
     page_icon="🌏",
@@ -14,6 +16,8 @@ st.set_page_config(
         'About': "# This is a header. This is an *extremely* cool app!"
     }
 )
+st.title('Greenwashing top')
+
 
 with st.expander("Los Nadies - Eduardo Galeano"):
     # Motivation
@@ -46,15 +50,21 @@ with st.expander("Los Nadies - Eduardo Galeano"):
     sino en la crónica roja de la prensa local.  
     Los nadies que cuestan menos que la bala que los mata.  
     """)
-    st.write("> In a world were the future is darker, los nadies are requested to use less the car, use ventilators instead of ACs, fly less, etc. while those tho think are someone contribure more everytime to the global warming.")
-
-st.title('Greenwashing top')
+    st.write("> In a world with dark and gloomy future, _los nadies_ are requested to use less the car, use ventilators instead of ACs, fly less, etc. while those tho think are someone contribure more everytime to the global warming.")
 
 if st.secrets["env"] == "streamlit":
-    storage_options={"anon":False, "client_kwargs":{'endpoint_url':st.secrets["AWS_S3_ENDPOINT"]}}
+    storage_options = {
+        "anon": False,
+        "key": st.secrets["AWS_SECRET_KEY_ID"],
+        "secret": st.secrets["AWS_SECRET_ACCESS_KEY"],
+        "client_kwargs": {'endpoint_url': st.secrets["AWS_S3_ENDPOINT"]}
+    }
+    fs = s3fs.S3FileSystem(**storage_options)
+
     @st.experimental_memo(ttl=600)
     def load_attribution(countries=None, owners=None):
-        df = pd.read_csv("s3://gwt/export/attribution_co2.csv", header=0, storage_options=storage_options)
+        with fs.open("s3://gwt/attribution_co2.csv") as f:
+            df = pd.read_csv(f, header=0)
         if countries:
             df = df[df.country.isin(countries)]
         if owners:
@@ -62,18 +72,21 @@ if st.secrets["env"] == "streamlit":
         return df
     
     @st.experimental_memo(ttl=600)
-    def load_flight_data(ownop, icao):
+    def load_flight_icao(ownop, icao):
         try:
-            df = pd.read_csv(f"s3://gwt/export/trips_history/{icao}.csv", header=0, storage_options=storage_options)
-            df["ownop"] = ownop
+            with fs.open(f"s3://gwt/trips_history/{icao}.csv") as f:
+                df = pd.read_csv(f, header=0)
+                df["ownop"] = ownop
             return df.sort_values(["time"])
         except:
-            df = pd.DataFrame(columns=["ownop", "lat", "lon", "time"], storage_options=storage_options)
+            df = pd.DataFrame(columns=["ownop", "lat", "lon", "time"])
             return df
 
-    @st.experimental_memo(ttl=600)    
+    @st.experimental_memo(ttl=600)
     def load_co2_country():
-        return pd.read_csv("s3://gwt/export/co2_per_country.csv", header=0)
+        with fs.open("s3://gwt/co2_per_country.csv") as f:
+            df = pd.read_csv(f, header=0)
+        return df
     
 
 
@@ -89,7 +102,7 @@ else:
         return df
     
     #@st.cache
-    def load_flight_data(ownop, icao):
+    def load_flight_icao(ownop, icao):
         try:
             df = pd.read_csv(f"export/trips_history/{icao}.csv", header=0)
             df["ownop"] = ownop
@@ -101,6 +114,30 @@ else:
     def load_co2_country():
         return pd.read_csv("export/co2_per_country.csv", header=0)
     
+
+def load_flight_data(pairs):
+    # my_bar = st.progress(0)
+    # percent_complete = 1 / len(pairs)
+    # acc = 0
+    # pds = []
+    # for p in pairs:
+    #     ownop = p[0]
+    #     icao = p[1]
+    #     try:
+    #         with fs.open(f"s3://gwt/trips_history/{icao}.csv") as f:
+    #             df = pd.read_csv(f, header=0)
+    #             df["ownop"] = ownop
+    #     except:
+    #         df = pd.DataFrame(columns=["ownop", "lat", "lon", "time"])
+    #     pds.append(df.sort_values(["time"]))
+    #     my_bar.progress(percent_complete)
+    #     acc += percent_complete
+
+    flight_data = pd.concat([load_flight_icao(p[0], p[1]) for p in pairs])
+    #flight_data = pd.concat(pds)
+
+    #my_bar.progress(1 - acc)
+    return flight_data
 
 def plot_map(df, color="ownop"):
     fig = px.line_mapbox(df, lat="lat", lon="lon", color="ownop", height=600) #, width=1500, height=800)
@@ -127,14 +164,23 @@ attribution = load_attribution(countries=countries, owners=ownop)
 
 
 TIPS = [
-    "Look for Aircraft 'EMS-2', now owned by the Jordan Royal Squadron that was probably a spanish aircraft, since EM is reserved for the country's militar aircarfts.",
+    "Look for Aircraft 'EMS-2', now owned by the _Jordan Royal Squadron_ that was probably a spanish aircraft, since EM is reserved for the country's militar aircarfts.",
     "Look for 'Iron Maiden' to see all the places they have been performing at.",
     "Liechestein and Switzerland have the same registration prefix: 'HB'. So you'll get data from both together.",
     "There is data from individuals and companies owning 2 jets or less.",
     "Fuel consumed and CO2 generated is an approximation and is probably higher than what is stated here. It depends on plane weight, speed, flight route...",
+    "Ownership for non-US jets is not as good as we would like.",
+    "Improvement plan: Detect if owner is a company or an individual with a Named Entity Recognition algorithm (bert-base-NER from hugginface)",
+    ""
 ]
 SOURCES = [
- "Source: [CO2 Data explorer](https://ourworldindata.org/explorers/co2) - World of Data",   
+    "[CO2 Data explorer](https://ourworldindata.org/explorers/co2) - World of Data",
+    "[Countries with Regional Codes](https://github.com/lukes/ISO-3166-Countries-with-Regional-Codes) - Lukes CC BY SA",
+    "[Registration country code prefix](https://en.wikipedia.org/wiki/List_of_aircraft_registration_prefixes) - Wikipedia",
+    "[ADS-B Exchange](https://www.adsbexchange.com/) - Flight paths and aircraft ownership (collaborative)",
+    "[Open Sky Network](https://opensky-network.org/) - Flight paths and aircraft ownership (collaborative)",
+    "[Private Jet Fuel Burn](https://compareprivateplanes.com/articles/private-jet-fuel-burn-per-hour) - compareprivateplanes",
+    "[Aircraft Type Fuel Consumptions Rate](https://github.com/Jxck-S/plane-notify/blob/multi/aircraft_type_fuel_consumption_rates.json) - Jack Sweeney Plane notify",
 ]
 import random
 
@@ -152,9 +198,16 @@ countries = st.sidebar.multiselect("Polluters country", attribution.country.uniq
 ownop = st.sidebar.multiselect("Choose polluters", attribution.ownop.unique(), default=None)
 date = st.sidebar.selectbox("Choose Date", attribution.date.unique())
 
+st.sidebar.empty()
+st.sidebar.subheader("Sources")
+st.sidebar.caption("  \n".join(SOURCES))
+
+
+
 attribution = load_attribution(countries=countries, owners=ownop)
 attribution = attribution[attribution.date == date]
-attribution["metric"] = attribution["co2_tons"] * 365 / co2_per_capita
+hourly_co2_capita = co2_per_capita / (365 * 24)
+attribution["metric"] = attribution["co2_tons"] / (attribution["air_h"] * hourly_co2_capita)
 
 #from datetime import datetime, timezone, timedelta
 #yesterday = datetime.now(timezone.utc) - timedelta(days=1)
@@ -172,7 +225,7 @@ attribution["metric"] = attribution["co2_tons"] * 365 / co2_per_capita
 col1, col2, col3 = st.columns(3)
 col1.metric("Flown Hours", np.round(attribution.air_h.sum(), 2))
 col2.metric("CO2 tons", np.round(attribution.co2_tons.sum(), 2)) #, "+8%")
-col3.metric("# of citizens", np.round(attribution["metric"].sum(), 0))
+col3.metric("equivalent to", np.round(attribution["metric"].sum(), 0), f" {country_comparison} citizens", delta_color="inverse")
 #countries = st.multiselect("Choose country", attribution.country, default=None) 
 
 
@@ -203,8 +256,8 @@ if len(ownop) == 0 and not countries:
     flight_data = pd.DataFrame(columns=["ownop", "lat", "lon"])
     st.write('Too much data to show a map')
 else:
-    pairs = load_attribution(countries=countries, owners=ownop)[["ownop", "icao"]].values.tolist()
-    flight_data = pd.concat([load_flight_data(p[0], p[1]) for p in pairs])
+    pairs = load_attribution(countries=countries, owners=ownop)[["ownop", "icao"]].drop_duplicates().values.tolist()
+    flight_data = load_flight_data(pairs)
     flight_data = flight_data[flight_data.date == date]
     if not flight_data.empty:
         st.plotly_chart(plot_map(flight_data) , use_container_width=True)
