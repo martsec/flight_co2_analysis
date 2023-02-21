@@ -16,7 +16,7 @@ st.set_page_config(
         'About': "# This is a header. This is an *extremely* cool app!"
     }
 )
-st.title('Greenwashing top')
+st.title('Greenwashing Ranking')
 
 
 with st.expander("Los Nadies - Eduardo Galeano"):
@@ -184,7 +184,7 @@ SOURCES = [
 ]
 import random
 
-st.warning('This is a Work In Progress app. Please do not share much. Feedback is welcomed at [@8vicat](https://twitter.com/8vicat)', icon="⚠️")
+
 st.info(random.choice(TIPS), icon="ℹ️")
 co2_countries = load_co2_country()
 
