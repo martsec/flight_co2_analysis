@@ -14,6 +14,13 @@ See for example for Amacio Ortega (Zara):
 * Yatch DRIZZLE https://www.vesselfinder.com/es/vessels/DRIZZLE-IMO-1011719-MMSI-256701000
 ====
 
+[quote]
+--
+* [ ] En les x h de vol, a quantes persones equival? (ciutadants per hora volada)
+* [ ] Usar algo com https://huggingface.co/dslim/bert-base-NER[bert-base-NER] per identificar si l'owner és persona o empresa
+* [ ] Automatitzar descàrrega i actualització
+--
+
 
 == Links of interest
 
